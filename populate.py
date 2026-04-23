@@ -7,16 +7,14 @@ import datetime
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "project.settings")
 django.setup()
 
-from application.models import PerfilUsuario, Canal, Suscripcion, Ubicacion
+from application.models import PerfilUsuario, Ubicacion
 from django.contrib.gis.geos import Point, Polygon
 from django.contrib.auth.models import User
 from application.models import Zona
 
 # Borrar datos previos
-Suscripcion.objects.all().delete()
 PerfilUsuario.objects.all().delete()
 User.objects.all().delete()
-Canal.objects.all().delete()
 Zona.objects.all().delete()
 
 # Crear usuarios
@@ -40,9 +38,11 @@ p5.save()
 
 Ubicacion.objects.create(
     usuario=p4,
-    posicion=Point(40.5616, -3.6287),
+    posicion=Point(40.5049, -3.6973),
     disponible=True,
 )
+
+
 
 
 zona1 = Zona.objects.create(

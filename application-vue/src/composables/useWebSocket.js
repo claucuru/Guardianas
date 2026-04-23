@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-export function useWebSocket({ onSolicitudRegistro, onNuevoAcompañamiento, onAcompañantePropuesto, onAcompañamientoConfirmado, onAcompañanteAsignado }) {
+export function useWebSocket({ onSolicitudRegistro, onNuevoAcompañamiento, onAcompañantePropuesto, onAcompañamientoConfirmado, onAcompañanteAsignado, onAcompañamientoFinalizado }) {
   const socket = ref(null)
 
   function connect() {
@@ -16,6 +16,7 @@ export function useWebSocket({ onSolicitudRegistro, onNuevoAcompañamiento, onAc
       if (data.type === 'acompañante_propuesto') onAcompañantePropuesto?.(data)
       if (data.type === 'acompañamiento_confirmado') onAcompañamientoConfirmado?.(data)
       if (data.type === 'acompañante_asignado') onAcompañanteAsignado?.(data)
+      if (data.type === 'acompañamiento_finalizado') onAcompañamientoFinalizado?.(data)
 
     }
   }

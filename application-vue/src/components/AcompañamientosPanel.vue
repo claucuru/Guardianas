@@ -50,7 +50,7 @@
               <div v-for="a in solicitados" :key="a.id" class="acomp-item">
                   <div class="acomp-item-top">
                       <span :class="`estado-badge estado-${estadoClass(a.estado)}`">{{ estadoLabel(a.estado) }}</span>
-                      <span class="acomp-fecha">{{ a.fecha }}</span>
+                      <span class="acomp-fecha">{{ formatearFecha(a.fecha) }}</span>
                   </div>
                   <MapaAcompañamientos
                     v-if="a.origen_lat && a.destino_lat"
@@ -61,7 +61,10 @@
                     :exacto="a.coordenadas_exactas"
                   />
                   <div v-if="a.hora_solicitada" class="acomp-hora">
-                    {{ a.hora_solicitada }}
+                    <span class="acomp-persona-label">Hora de inicio: </span> {{ a.hora_solicitada }}
+                  </div>
+                  <div v-if="a.hora_fin_estimada" class="acomp-hora">
+                    <span class="acomp-persona-label">Hora de finalización: </span> {{ a.hora_fin_estimada }}
                   </div>
                   <div v-if="a.acompañante && a.estado === 'ACEPTADO'" class="acomp-propuesta">
                     <div class="acomp-persona">
@@ -69,7 +72,7 @@
                       <span class="acomp-persona-nombre">{{ a.acompañante_nombre || a.acompañante }}</span>
                     </div>
                     <div class="acomp-propuesta-btns">
-                      <button class="btn-ver-perfil" @click="() => { console.log('a:', a); emit('ver-perfil', a.acompañante)}">
+                      <button class="btn-ver-perfil" @click="() => { console.log('a:', a); emit('ver-perfil', a.acompañante); emit('ver-perfil', a.acompañante)}">
                         Ver perfil
                       </button>
                       <button class="btn-aceptar-acomp" @click="$emit('responder', { id: a.id, acepta: true})">
@@ -86,6 +89,26 @@
                       <button class="btn-ver-perfil" @click="emit('ver-perfil', a.acompañante)">
                         Ver perfil
                       </button>
+                  </div>
+
+                  <!-- Valoración --> 
+                  <div v-if="a.estado === 'FINALIZADO' && !a.ya_valoro" class="valoracion-widget">
+                    <p style="font-size:0.82rem; color:var(--muted)">Valora a tu acompañante</p>
+                    <div class="estrellas">
+                      <span 
+                        v-for="n in 5" :key="n"
+                        class="estrella"
+                        :class="{ activa: (estrellasInput[a.id] || 0) >= n}"
+                        @click="estrellasInput[a.id] = n"
+                      >★</span>
+                    </div>
+                    <textarea v-model="comentarioInput[a.id]" placeholder="Comentario opcional..." class="comentario-input" rows="2"/>
+                    <button class="btn-aceptar-acomp" :disabled="!estrellasInput[a.id]" @click="valorar(a.id)">
+                      Enviar valoración
+                    </button>
+                  </div>
+                  <div v-else-if="a.estado === 'FINALIZADO' && a.ya_valoro" class="acomp-hora">
+                    Valorado
                   </div>
                   <div v-else-if="a.estado === 'SOLICITADO'" class="acomp-buscando">
                       Buscando acompañante...
@@ -104,7 +127,7 @@
                 <div v-for="a in disponibles" :key="a.id" class="acomp-item">
                     <div class="acomp-item-top">
                         <span class="acomp-solicitante">{{ a.solicitante_nombre || a.solicitante }}</span>
-                        <span class="acomp-fecha">{{ a.fecha }}</span>
+                        <span class="acomp-fecha">{{ formatearFecha(a.fecha) }}</span>
                     </div>
                     <MapaAcompañamientos
                       v-if="a.origen_lat && a.destino_lat"
@@ -115,7 +138,10 @@
                       :exacto="false"
                     />
                     <div v-if="a.hora_solicitada" class="acomp-hora">
-                      {{ a.hora_solicitada }}
+                      <span class="acomp-persona-label">Hora de inicio: </span> {{ a.hora_solicitada }}
+                    </div>
+                    <div v-if="a.hora_fin_estimada" class="acomp-hora">
+                      <span class="acomp-persona-label">Hora de finalización: </span> {{ a.hora_fin_estimada }}
                     </div>
                     <button class="btn-aceptar-acomp" @click="$emit('aceptar', a.id)">
                         Aceptar acompañamiento
@@ -132,7 +158,7 @@
                   <span :class="`estado-badge estado-${estadoClass(a.estado)}`">
                     {{ estadoLabel(a.estado) }}
                   </span>
-                  <span class="acomp-fecha">{{ a.fecha }}</span>
+                  <span class="acomp-fecha">{{ formatearFecha(a.fecha) }}</span>
                 </div>
                 <div class="acomp-persona">
                   <span class="acomp-persona-label">Solicitante</span>
@@ -141,6 +167,15 @@
                     Ver perfil
                   </button>
                 </div>
+                <div v-if="a.estado === 'FINALIZADO' && !a.ya_valoro" class="valoracion-widget">
+                  <p style="font-size:0.82rem; color:var(--muted)">Valora al solicitante</p>
+                  <div class="estrellas">
+                    <span v-for="n in 5" :key="n" class="estrella" :class="{ activa: (estrellasInput[a.id] || 0) >=n }" @click="estrellasInput[a.id] = n">★</span>
+                  </div>
+                  <textarea v-model="comentarioInput[a.id]" placeholder="Comentario opcional..." class="comentario-input" rows="2"/>
+                  <button class="btn-aceptar-acomp" :disabled="!estrellasInput[a.id]" @click="valorar(a.id)"> Enviar valoración </button>
+                </div>
+                <div v-else-if="a.estado === 'FINALIZADO' && a.ya_valoro" class="acomp-hora">Valorado</div>
                 <MapaAcompañamientos
                       v-if="a.origen_lat && a.destino_lat"
                       :origen-lat="a.origen_lat"
@@ -150,7 +185,14 @@
                       :exacto="a.coordenadas_exactas"
                 />
                 <div v-if="a.hora_solicitada" class="acomp-hora">
-                  {{ a.hora_solicitada }}
+                  <span class="acomp-persona-label">Hora de inicio: </span> {{ a.hora_solicitada }}
+                </div>
+                <div v-if="a.hora_fin_estimada" class="acomp-hora">
+                  <span class="acomp-persona-label">Hora de finalización: </span> {{ a.hora_fin_estimada }}
+                </div>
+                <div v-if="a.hora_finalizacion" class="acomp-hora">
+                  <span class="acomp-persona-label">Hora de finalización</span>
+                  <span class="acomp-persona-label">{{ a.hora_finalizacion }}</span>
                 </div>
                 <!-- Boton de cancelar del acompañante -->
                 <button v-if="['ACEPTADO', 'ASIGNADO'].includes(a.estado)" class="btn-cancelar-acomp" @click="cancelarAcompañamiento(a.id)">
@@ -178,8 +220,22 @@ const canceladosRecientes = ref([])
 const notificacionesCerradas = ref(new Set(
   JSON.parse(localStorage.getItem('cancelaciones_cerradas') || '[]')
 ))
+const horaFinInput = ref({})
+const estrellasInput = ref({})
+const comentarioInput = ref({})
 
 let intervalo = null
+
+function formatearFecha(isoString) {
+  if (!isoString) return ''
+  return new Date(isoString).toLocaleString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day:'2-digit',
+    month: '2-digit',
+    year:'numeric',
+  }).replace(',', '·')
+}
 
 function estadoLabel(estado) {
     if (!estado) return '-'
@@ -187,7 +243,6 @@ function estadoLabel(estado) {
     SOLICITADO: 'Buscando',
     ACEPTADO:   'Propuesta',
     ASIGNADO:   'Confirmado',
-    EN_CURSO:   'En curso',
     FINALIZADO: 'Finalizado',
   }
   return labels[estado] || estado
@@ -218,6 +273,9 @@ async function reenviarSolicitud(acompañamientoId) {
   try {
     await api.post(`api/v1/acompañamientos/${acompañamientoId}/reenviar/`)
     cerrarNotificacion(acompañamientoId)
+    // Limpiamos el id del acompañamiento del localStorage para que se pueda enviar de nuevo
+    notificacionesCerradas.value.delete(acompañamientoId)
+    localStorage.setItem('cancelaciones_cerradas', JSON.stringify([...notificacionesCerradas.value]))
     await cargar()
   } catch {
     console.error('Error al reenviar solicitud')
@@ -232,6 +290,29 @@ async function cancelarAcompañamiento(id) {
     console.error('Error al cancelar')
   }
 }
+
+async function marcarHoraFin(id) {
+  if (!horaFinInput.value[id]) return 
+  await api.post(`api/v1/acompañamientos/${id}/hora-fin/`, {
+    hora_fin: horaFinInput.value[id]
+  })
+  await cargar()
+}
+
+async function valorar(id) {
+  try {
+    await api.post(`api/v1/acompañamientos/${id}/valorar/`, {
+    puntuacion: estrellasInput.value[id],
+    comentario: comentarioInput.value[id] || '',
+  })
+    await cargar()
+  } catch (err) {
+    console.error('Error al valorar:', err.response?.data)
+  }
+  
+}
+
+
 
 
 onMounted(() => {
@@ -338,9 +419,13 @@ btn-cerrar-notif {
 }
 
 .acomp-panel-header h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  color: var(--accent-strong);
+  margin: 0 0 10px 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  font-family: 'Rozha One', serif;
 }
 
 .acomp-tabs {
@@ -519,6 +604,42 @@ btn-cerrar-notif {
   transition: background .2s;
 }
 .btn-aceptar-acomp:hover { background: rgba(95,143,123,0.22); }
+
+.hora-fin-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.estrellas {
+  display: flex;
+  gap: 4px;
+  font-size: 1.4rem;
+}
+.estrella {
+  cursor: pointer;
+  color: var(--border);
+  transition: color .15s;
+}
+.estrella.activa { color: #f5b800; }
+.valoracion-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.comentario-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.82rem;
+  resize: none;
+}
+
 </style>
 
 

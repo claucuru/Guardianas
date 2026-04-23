@@ -18,7 +18,8 @@ export function useZonas(mapRef, onZonaClick) {
     try {
       const res = await api.get('api/v1/zonas/')
       const geojson = res.data
-      zonas.value = geojson.features.map(f => ({ id: f.id, nombre: f.properties.nombre, coordenadas: f.geometry, }))
+      console.log(geojson.features[0])
+      zonas.value = geojson.features.map(f => ({ id: f.properties.id, nombre: f.properties.nombre, coordenadas: f.geometry, }))
       if (zonasLayer.value) mapRef.value.removeLayer(zonasLayer.value)
       zonasLayer.value = L.geoJSON(geojson, {
         style(feature) {
@@ -33,13 +34,17 @@ export function useZonas(mapRef, onZonaClick) {
           layer.on('click', () => {
             console.log('clic en feature:', feature)
             if (onZonaClick) onZonaClick({
-                id: feature.id,
+                id: feature.properties.id,
                 nombre: feature.properties.nombre,
             })
           })
         },
       }).addTo(mapRef.value)
-      mapRef.value.fitBounds(zonasLayer.value.getBounds())
+      
+      // Protegemos fitbounds para que no de error en caso de que solo haya una zona
+      const bounds = zonasLayer.value.getBounds()
+      if (bounds.isValid()) mapRef.value.fitBounds(bounds)
+      
     } catch (e) {
       console.error('Error cargando zonas:', e)
     }

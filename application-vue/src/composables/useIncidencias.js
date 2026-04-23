@@ -26,6 +26,7 @@ export function useIncidencias() {
       descripcion.value = ''
       gravedadSeleccionada.value = 1
       await cargarIncidencias()
+      await cargarZonas()
       onSuccess?.()   // Recargamos las zonas
     } catch (e) {
       console.error('Error al crear incidencia:', e)

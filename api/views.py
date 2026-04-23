@@ -7,8 +7,8 @@ from django.shortcuts import render
 # Create your views here.
 from api.forms import LoginForm
 from rest_framework import viewsets
-from application.models import Canal, RegistroPendiente, Ubicacion, PerfilUsuario, Suscripcion, Zona, Incidencia, Acompañamiento, CandidatoAcompañamiento
-from .serializers import CanalSerializer, PerfilUsuarioSerializer, SuscripcionSerializer, ZonaSerializer, IncidenciaSerializer, AcompañamientoSerializer
+from application.models import RegistroPendiente, Ubicacion, PerfilUsuario, Valoracion, Zona, Incidencia, Acompañamiento, CandidatoAcompañamiento
+from .serializers import  PerfilUsuarioSerializer, ZonaSerializer, IncidenciaSerializer, AcompañamientoSerializer
 from django.db.models import Sum
 from django.contrib.gis.measure import D, Distance
 from django.contrib.gis.geos import Point
@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .consumers import send_notificacion, send_notificacion_acompañamiento, send_notificacion_acompañamiento_confirmado, send_notificacion_acompañante_propuesto, send_notificacion_cancelacion
+from .consumers import send_notificacion, send_notificacion_acompañamiento, send_notificacion_acompañamiento_confirmado, send_notificacion_acompañante_propuesto, send_notificacion_cancelacion, send_notificacion_finalizado
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
@@ -211,32 +211,32 @@ def mis_solicitudes_pendientes(request):
         
         
 
-@api_view(['POST'])
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated])
-def activar_disponible(request):
-    perfil = request.user.perfilusuario
-    perfil.disponible = not perfil.disponible
-    perfil.save()
+# @api_view(['POST'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
+# def activar_disponible(request):
+#     perfil = request.user.perfilusuario
+#     perfil.disponible = not perfil.disponible
+#     perfil.save()
 
-    if perfil.disponible:
-        lat = request.data.get('lat')
-        lng = request.data.get('lng')
-        if lat and lng:
-            Ubicacion.objects.update_or_create(
-                usuario=perfil,
-                defaults={
-                    'posicion': Point(float(lng), float(lat), srid=4326),
-                    "disponible": True,
-                }
-            )
-        else:
-            Ubicacion.objects.filter(usuario=perfil).update(disponible=True)
-    else:
-        # Se ha desactivado entonces marcamos la ubicación como no disponible
-        Ubicacion.objects.filter(usuario=perfil).update(disponible=False)
+#     if perfil.disponible:
+#         lat = request.data.get('lat')
+#         lng = request.data.get('lng')
+#         if lat and lng:
+#             Ubicacion.objects.update_or_create(
+#                 usuario=perfil,
+#                 defaults={
+#                     'posicion': Point(float(lng), float(lat), srid=4326),
+#                     "disponible": True,
+#                 }
+#             )
+#         else:
+#             Ubicacion.objects.filter(usuario=perfil).update(disponible=True)
+#     else:
+#         # Se ha desactivado entonces marcamos la ubicación como no disponible
+#         Ubicacion.objects.filter(usuario=perfil).update(disponible=False)
 
-    return Response({"disponible": perfil.disponible})
+#     return Response({"disponible": perfil.disponible})
 
 def añadir_ruido(coord, metros=100):
     """ Desplaza una coordenada alrededor de 400 metros en dirección aleatoria """
@@ -248,6 +248,9 @@ def añadir_ruido(coord, metros=100):
 @permission_classes([IsAuthenticated])
 def pedir_acompañamiento(request):
     """ Solicitante crea un acompañamiento. Se notifican a los usuarios cercanos disponibles."""
+    import pytz
+    hora_españa = pytz.timezone('Europe/Madrid')
+
     origen_lat = request.data.get('origen_lat')    
     origen_lng = request.data.get('origen_lng')
     destino_lat = request.data.get('destino_lat')
@@ -258,7 +261,7 @@ def pedir_acompañamiento(request):
     # Comprobamos si el solicitante tiene ya un acompañamiento activo
     activo = Acompañamiento.objects.filter(
         solicitante=perfil,
-        estado__in=['SOLICITADO', 'ACEPTADO', 'ASIGNADO', 'EN_CURSO'],
+        estado__in=['SOLICITADO', 'ACEPTADO', 'ASIGNADO'],
         caduca_en__gt=timezone.now(),
     ).exists()
 
@@ -274,21 +277,35 @@ def pedir_acompañamiento(request):
     origen = Point(float(origen_lng), float(origen_lat), srid=4326)
     destino = Point(float(destino_lng), float(destino_lat), srid=4326)
 
-    hora_solicitada = None
-    if hora_str:
-        try:
-            hora_solicitada = datetime.strptime(hora_str, '%H:%M').time()
-        except ValueError:
-            pass
-
     acompañamiento = Acompañamiento.objects.create(
         solicitante=request.user.perfilusuario,
         origen=origen,
         destino=destino,
         estado="SOLICITADO",
-        hora_solicitada=hora_solicitada,
     )
 
+    hora_solicitada = None
+    if hora_str:
+        try:
+            hora_solicitada = datetime.strptime(hora_str, '%H:%M').time()
+            acompañamiento.hora_solicitada = hora_solicitada
+        except ValueError:
+            pass
+
+
+    hora_fin_str = request.data.get('hora_fin')
+    if hora_fin_str:
+        try:         
+            hora_fin = datetime.strptime(hora_fin_str, '%H:%M').time()
+            hoy = timezone.now().astimezone(hora_españa).date()
+            # fecha_fin = timezone.make_aware(datetime.combine(hoy, hora_fin))
+            fecha_fin = hora_españa.localize(datetime.combine(hoy, hora_fin))
+            acompañamiento.hora_fin_estimada = hora_fin
+            acompañamiento.fecha_fin = fecha_fin
+        except ValueError:
+            pass
+    
+    acompañamiento.save()
     # Notificar a personas en un radio de 2km
     acompañantes_cercanos = Ubicacion.objects.filter(
         disponible=True,
@@ -298,13 +315,10 @@ def pedir_acompañamiento(request):
     ).filter(
         posicion__distance_lte=(origen, D(km=2))
     ).select_related('usuario')
-
-    print(f"Acompañantes encontradas: {acompañantes_cercanos.count()}")
+    
     for ubi in acompañantes_cercanos:
-        print(f" - {ubi.usuario.nombreUsuario} | ubi.disponible={ubi.disponible} | perfil.disponible={ubi.usuario.disponible}")
-        print(f"Notificando a: {ubi.usuario.nombreUsuario}, user.id: {ubi.usuario.user.id}")
         send_notificacion_acompañamiento(ubi.usuario.user.id, acompañamiento)
-
+    print(f"Acompañantes encontradas: {acompañantes_cercanos.count()}")
 
     return Response({"id": acompañamiento.id, "estado": acompañamiento.estado})
 
@@ -313,6 +327,8 @@ def pedir_acompañamiento(request):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def mis_acompañamientos(request):
+    finalizar_acompañamientos_expirados()
+
     ahora = timezone.now()
     perfil = request.user.perfilusuario
     # Los acompañamientos que he solicitado yo no cancelados
@@ -329,18 +345,29 @@ def mis_acompañamientos(request):
     ).order_by('-fecha_comienzo')
 
     # Las solicitudes de acompañamiento que me han llegado a mí 
-    disponibles = Acompañamiento.objects.filter(
-        estado='SOLICITADO',
-        caduca_en__gt=ahora,
-    ).exclude(solicitante=perfil).order_by('-fecha_comienzo')
+    try: 
+        ubicacion_perfil = Ubicacion.objects.get(usuario=perfil)
+        print(f"Ubicacion de {perfil.nombreUsuario}: x={ubicacion_perfil.posicion.x}, y = {ubicacion_perfil.posicion.y}")
+        disponibles = Acompañamiento.objects.filter(
+            estado__in=['SOLICITADO', 'ACEPTADO'],
+            caduca_en__gt=ahora,
+        ).exclude(solicitante=perfil).filter(origen__distance_lte=(ubicacion_perfil.posicion, D(km=2))).order_by('-fecha_comienzo')
+    except Ubicacion.DoesNotExist:
+        print(f"{perfil.nombreUsuario} NO TIENE UBI EN LA BD")
+        disponibles = Acompañamiento.objects.filter(
+            estado='SOLICITADO',
+            caduca_en__gt=ahora,
+        ).exclude(solicitante=perfil).order_by('-fecha_comienzo')
 
+    
     def serializar(a, es_mio):
-        # Se mandan las coordenadas exactas cuando el acompañamiento esté en estado ASIGNADO o EN CURSO y es mi solicitud o soy el acompañante confirmado
+        # Se mandan las coordenadas exactas cuando el acompañamiento esté en estado ASIGNADO y es mi solicitud o soy el acompañante confirmado
 
         soy_acompañante_confirmado = (
-            a.acompañante and a.acompañante == perfil and a.estado in ('ASIGNADO', 'EN_CURSO')
+            a.acompañante and a.acompañante == perfil and a.estado in ('ASIGNADO')
         )
-        coordenadas_exactas = (es_mio and a.estado in ('ASIGNADO', 'EN_CURSO')) or soy_acompañante_confirmado
+        coordenadas_exactas = (es_mio and a.estado in ('ASIGNADO')) or soy_acompañante_confirmado
+        ya_valoro = a.valoraciones.filter(valorador=perfil).exists()
 
         if coordenadas_exactas:
             origen_lat = a.origen.y
@@ -367,13 +394,15 @@ def mis_acompañamientos(request):
             "destino_lat": round(destino_lat, 5),
             "destino_lng": round(destino_lng, 5),
             "coordenadas_exactas": coordenadas_exactas,
-            "fecha": a.fecha_comienzo.strftime('%H:%M · %d/%m/%Y'),
+            "fecha": a.fecha_comienzo.isoformat(),
             "hora_solicitada": a.hora_solicitada.strftime('%H:%M') if a.hora_solicitada else None,
+            "hora_fin_estimada": a.hora_fin_estimada.strftime('%H:%M') if a.hora_fin_estimada else None,
+            "ya_valoro": ya_valoro,
         }
     
     como_acompañante = Acompañamiento.objects.filter(
         acompañante=perfil, 
-        estado__in = ('ASIGNADO', 'EN_CURSO'),
+        estado__in = ('ASIGNADO','FINALIZADO'),
         caduca_en__gt = ahora,
     )
     return Response({
@@ -392,7 +421,7 @@ def cancelar_acompañamiento(request, acompañamiento_id):
     try:
         acompañamiento = Acompañamiento.objects.get(
             id=acompañamiento_id,
-            estado__in= ['SOLICITADO', 'ACEPTADO', 'EN_CURSO', 'ASIGNADO']
+            estado__in= ['SOLICITADO', 'ACEPTADO', 'ASIGNADO']
         )
     except Acompañamiento.DoesNotExist:
         return Response({"error": "El acompañamiento no ha sido encontrado"}, status=404)
@@ -559,17 +588,6 @@ def solicitante_responde_acompañante(request, acompañamiento_id):
         #     send_notificacion_acompañamiento(ubi.usuario.user.id, acompañamiento)
 
         return Response({"status": "acompañante_rechazado"})
-    
-@api_view(['POST'])
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated])
-def disponible(request):
-    # TODO: ESTA FUNCIÓN ESTÁ REPETIDA
-    """ Activa o desactiva la disponibilidad del usuario. """
-    perfil = request.user.perfilusuario
-    perfil.disponible = not perfil.disponible
-    perfil.save()
-    return Response({"disponible": perfil.disponible})
 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
@@ -607,17 +625,12 @@ def crear_perfil(sender, instance, created, **kwargs):
             nombreUsuario = instance.username
         )
 
-class CanalViewSet(viewsets.ModelViewSet):
-    queryset = Canal.objects.all()
-    serializer_class = CanalSerializer
-
-class SuscripcionViewSet(viewsets.ModelViewSet):
-    queryset = Suscripcion.objects.all()
-    serializer_class = SuscripcionSerializer
-
 class IncidenciaViewSet(viewsets.ModelViewSet):
     queryset = Incidencia.objects.all()
     serializer_class = IncidenciaSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(creado_por=self.request.user)
     
 
 class ZonaViewSet(viewsets.ModelViewSet):
@@ -653,4 +666,127 @@ class AcompañamientoViewSet(viewsets.ModelViewSet):
 
         print ("Acompañantes cercanos: ", acompañantes)
     
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def actualizar_ubicacion(request):
+    perfil = request.user.perfilusuario
+    lat = request.data.get('lat')
+    lng = request.data.get('lng')
 
+    if not lat or not lng:
+        return Response({"error": "Faltan coordenadas"}, status=400)
+    Ubicacion.objects.update_or_create(
+        usuario=perfil,
+        defaults={
+            'posicion': Point(float(lng), float(lat), srid=4326),
+            'disponible': True,
+        }
+    )
+
+    return Response({"status": "ok"})
+    
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def marcar_hora_fin(request, acompañamiento_id):
+    perfil = request.user.perfilusuario
+    try:
+        acompañamiento = Acompañamiento.objects.get(id=acompañamiento_id, solicitante=perfil, estado='ASIGNADO')
+    except Acompañamiento.DoesNotExist:
+        return Response({"error": "Acompañamiento no encontrado"}, status=404)
+    
+    hora_str = request.data.get('hora_fin')
+    try:
+        hora_fin = datetime.strptime(hora_str, '%H:%M').time()
+    except (ValueError, TypeError):
+        return Response({"error": "Hora inválida"}, status=400)
+    
+    import pytz
+    hora_españa = pytz.timezone('Europe/Madrid')
+    hora_fin = datetime.strptime(hora_str, '%H:%M').time()
+    hoy = timezone.now().astimezone(hora_españa).date()
+    fecha_fin = hora_españa.localize(datetime.combine(hoy, hora_fin))
+    acompañamiento.hora_fin_estimada = hora_fin
+    acompañamiento.fecha_fin = fecha_fin
+    acompañamiento.save()
+
+    return Response({"status": "hora_fin_guardada", "fecha_fin": fecha_fin})
+
+def finalizar_acompañamientos_expirados():
+    ahora = timezone.now()
+    expirados = Acompañamiento.objects.filter(
+        estado='ASIGNADO',
+        fecha_fin__lte=ahora,
+    )#.filter(
+        # La hora solicitada ya ha pasado
+    #     fecha_comienzo__date = ahora.dat(),
+    # ).exclude(
+    #     fecha_fin__isnull=True
+    # )
+
+    for a in expirados:
+        a.estado = 'FINALIZADO'
+        a.save()
+        # Notificar al usuario para que valore
+        send_notificacion_finalizado(a.solicitante.user.id, a)
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def valorar_acompañamiento(request, acompañamiento_id):
+    perfil = request.user.perfilusuario
+    try:
+        acompañamiento = Acompañamiento.objects.get(
+            id=acompañamiento_id,
+            # solicitante=perfil,
+            estado='FINALIZADO'
+        )
+    except Acompañamiento.DoesNotExist:
+        return Response({"error": "Acompañamiento no encontrado"}, status=404)
+    
+    es_solicitante = acompañamiento.solicitante == perfil
+    es_acompañante = acompañamiento.acompañante == perfil
+
+    if not es_solicitante and not es_acompañante:
+        return Response({"error": "No tienes permiso"}, status=403)
+    
+    # Comprobamos si ya se había valorado
+    if acompañamiento.valoraciones.filter(valorador=perfil).exists():
+        return Response({"error": "Ya has valorado este acompañamiento"}, status=400)
+    
+    puntuacion = request.data.get('puntuacion')
+    
+    try:
+        puntuacion = int(puntuacion)
+    except(TypeError, ValueError):
+        return Response({"error": "Puntuación inválida"}, status=400)
+    
+    valorado = acompañamiento.acompañante if es_solicitante else acompañamiento.solicitante
+    
+    Valoracion.objects.create(
+        acompañamiento=acompañamiento,
+        valorador=perfil,
+        valorado=valorado,
+        puntuacion=int(puntuacion),
+        comentario=request.data.get('comentario', ''),
+    )
+
+    return Response({"status": "valorado"})
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def ver_perfil_usuario(request, nombre_usuario):
+    try:
+        perfil = PerfilUsuario.objects.get(nombreUsuario=nombre_usuario)
+    except PerfilUsuario.DoesNotExist:
+        return Response({"error": "No encontrado"}, status=404)
+    
+    return Response({
+        "nombreUsuario": perfil.nombreUsuario,
+        "nombre_completo": perfil.nombre_completo,
+        "puntuacion_media": perfil.puntuacion_media,
+        "num_acompañamientos": perfil.num_acompañamientos,
+        "genero": perfil.genero,
+    })

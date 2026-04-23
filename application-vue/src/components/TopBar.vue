@@ -5,16 +5,6 @@
       <span class="app-title">Guardianas</span>
     </div>
     <div class="top-bar-right">
-       <!--- Disponible ---->
-       <button
-         class="toggle-disponible"
-         :class="{ activo: disponible }"
-         @click="$emit('toggle-disponible')"
-         :title="disponible ? 'Estás disponible como acompañante' : 'No estás disponible'">
-         <span class="toggle-dot"></span>
-         <span class="toggle-label">{{ disponible ? 'Disponible' : 'No disponible' }}  </span>
-      </button>
-      
       <button class="btn-acompañamiento"  @click="$emit('pedir-acompañamiento')">
          Pedir acompañamiento
       </button>
@@ -35,49 +25,12 @@
 defineProps({
   username: { type: String, default: ''},
   numSolicitudes: { type: Number , default: 0},
-  disponible: { type: Boolean, default: false},
 })
 
-defineEmits(['toggle-solicitudes', 'logout', 'pedir-acompañamiento', 'toggle-disponible'])
+defineEmits(['toggle-solicitudes', 'logout', 'pedir-acompañamiento'])
 </script>
 
 <style scoped>
-/* ----- Toggle disponible -------------------------- */
-.toggle-disponible {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 5px 12px 5px 8px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  color: var(--muted);
-  transition: all .2s;
-}
- 
-.toggle-disponible.activo {
-  border-color: var(--green);
-  color: var(--green);
-  background: rgba(95, 143, 123, 0.08);
-}
- 
-.toggle-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-  transition: background .2s;
-  flex-shrink: 0;
-}
- 
-.toggle-disponible.activo .toggle-dot {
-  background: var(--green);
-  box-shadow: 0 0 0 3px rgba(95, 143, 123, 0.2);
-}
- 
-.toggle-label { font-weight: 600; white-space: nowrap; }
  
 /* ----- Botón pedir acompañamiento ------------------------------------- */
 .btn-acompañamiento {
@@ -92,5 +45,36 @@ defineEmits(['toggle-solicitudes', 'logout', 'pedir-acompañamiento', 'toggle-di
   transition: opacity .2s, transform .1s;
   white-space: nowrap;
 }
+
 .btn-acompañamiento:hover { opacity: 0.88; transform: translateY(-1px); }
+@media (max-width: 600px) {
+  .top-bar-right {
+    gap: 6px;
+  }
+
+  .btn-acompañamiento {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+  }
+
+  .username-badge {
+    display: none; /* ocupa espacio pero aporta poco en móvil */
+  }
+
+  .btn-logout {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+  }
+}
+
+@media (max-width: 400px) {
+  .btn-acompañamiento span {
+    display: none;
+  }
+
+  .btn-logout {
+    display: none; /* si sigue sin caber, ocúltalo también */
+  }
+}
+
 </style>

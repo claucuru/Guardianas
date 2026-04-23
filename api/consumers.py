@@ -65,6 +65,12 @@ class NotificacionConsumer(AsyncWebsocketConsumer):
             "cancelado_por": event.get("cancelado_por"),
             "nombre": event.get("nombre"),
         }))
+    
+    async def acompañamiento_finalizado(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "acompañamiento_finalizado",
+            "acompañamiento_id": event.get("acompañameinto_id"),
+        }))
 
 def send_notificacion(mujer_id, pendiente):
     channel_layer = get_channel_layer()
@@ -123,5 +129,15 @@ def send_notificacion_cancelacion(user_id, acompañamiento, cancelado_por, nombr
             'acompañamiento_id': acompañamiento.id,
             'cancelado_por': cancelado_por,
             'nombre': nombre,
+        }
+    )
+
+def send_notificacion_finalizado(usuario_id, acompañamiento):
+    """ Notifica a la solicitante de que el acompañamiento ha finalizado y puede valorar al acompañante"""
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send) (
+        f"user_{usuario_id}", {
+            "type": "acompañamiento_finalizado",
+            "acompañamiento_id": acompañamiento.id,
         }
     )

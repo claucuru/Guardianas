@@ -4,6 +4,8 @@ from django.contrib.auth.models import User
 from datetime import timedelta
 from django.utils import timezone
 
+from project import settings
+
 # Create your models here.
 class PerfilUsuario(models.Model):
     GENERO_CHOICES = [
@@ -17,27 +19,21 @@ class PerfilUsuario(models.Model):
     disponible = models.BooleanField(default=False) # para acompañantes
     genero = models.CharField(max_length=1, choices=GENERO_CHOICES, null=True, blank=True)
 
+    @property
+    def puntuacion_media(self):
+        vals = self.valoraciones_recibidas.all()
+        if not vals.exists():
+            return None
+        return round(sum(v.puntuacion for v in vals) / vals.count(), 1)
+    @property 
+    def num_acompañamientos(self):
+        return Acompañamiento.objects.filter(acompañante=self, estado='FINALIZADO').count()
+    
     def __str__(self):
         return self.nombreUsuario
 
-class Canal (models.Model):
-    id = models.IntegerField(primary_key=True)
-    nombreCanal = models.CharField(max_length=100)
-
-    def __str__(self):
-        return self.nombreCanal
-
-class Suscripcion(models.Model):
-    id = models.IntegerField(primary_key=True)
-    canal = models.ForeignKey(Canal, on_delete=models.CASCADE)
-    usuario = models.ForeignKey(PerfilUsuario, on_delete=models.CASCADE)
-    fechaDeSuscripcion = models.DateField()
-
-    def __str__(self):
-        return f"{self.usuario} suscrito al canal {self.canal} el {self.fechaDeSuscripcion}"
-    
-
 class Zona(models.Model):
+    """Modelo que representa una zona en un mapa Leaflet"""
     nombre = models.CharField(max_length=100)
     area = models.PolygonField(srid=4326)
 
@@ -45,17 +41,22 @@ class Zona(models.Model):
         return self.nombre
 
 class Incidencia (models.Model):
+    """Modelo que representa una incidencia"""
     zona = models.ForeignKey(Zona, on_delete=models.CASCADE, related_name="incidencias")
     gravedad = models.IntegerField()
     descripcion = models.TextField()
     fecha = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="incidencias")
+    
 
 class Ubicacion(models.Model):
+    """Modelo que representa la ubicación de un usuario"""
     usuario = models.OneToOneField(PerfilUsuario, on_delete=models.CASCADE)
     posicion = models.PointField(srid=4326)
     disponible = models.BooleanField(default=True)
 
-def expiracion()   :
+
+def expiracion():
     return timezone.now() + timedelta(hours=72)
 def expiracion_acompañamiento():
     return timezone.now() + timedelta(hours=3)
@@ -84,16 +85,15 @@ class Acompañamiento(models.Model):
             ("SOLICITADO", "Solicitado"),
             ("ACEPTADO", "Aceptado por acompañante"),
             ("ASIGNADO", "Confirmado por solicitante"),
-            ("EN_CURSO", "En curso"),
             ("FINALIZADO", "Finalizado"),
             ("CANCELADO", "Cancelado"),
         ],
         default="buscando"
     )
     cancelado_por = models.CharField(max_length=20, null=True, blank=True)
-
     caduca_en = models.DateTimeField(default=expiracion_acompañamiento)
     hora_solicitada = models.TimeField(null=True, blank=True)
+    hora_fin_estimada = models.TimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Solicitante {self.solicitante}, Acompañante {self.acompañante or 'sin asignar'}"
@@ -130,3 +130,18 @@ class CandidatoAcompañamiento(models.Model):
         # FIFO, el primero en aceptar es el primero en la cola
         ordering = ['fecha']
         unique_together = [('acompañamiento', 'candidato')]
+
+class Valoracion(models.Model):
+    acompañamiento = models.ForeignKey(Acompañamiento, on_delete=models.CASCADE, related_name='valoraciones')
+    valorador = models.ForeignKey(PerfilUsuario, on_delete=models.CASCADE, related_name='valoraciones_dadas')
+    valorado = models.ForeignKey(PerfilUsuario, on_delete=models.CASCADE, related_name='valoraciones_recibidas')
+    puntuacion = models.IntegerField()
+    comentario = models.TextField(blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Cada uno valora una vez
+        unique_together = [('acompañamiento', 'valorador')] 
+
+    def __str__(self):
+        return f"{self.valorador} ha valorado a {self.valorado} con una punuación de {self.puntuacion}★"

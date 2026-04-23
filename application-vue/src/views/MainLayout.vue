@@ -3,10 +3,8 @@
     <TopBar
       :username="currentUsername"
       :num-solicitudes="solicitudesPendientes.length"
-      :disponible="disponible"
       @toggle-solicitudes="togglePanelSolicitudes"
       @logout="handleLogout"
-      @toggle-disponible="handleToggleDisponible"
       @pedir-acompañamiento="abrirModalAcompañamiento"
     />
 
@@ -45,6 +43,7 @@
           @crear="handleCrearIncidencia"
         />
         <MapaZonas
+          :zonas="zonas"
           :incidencias="incidencias"
           :zona-activa="zonaActiva"
           @mapa-listo="handleMapaListo"
@@ -72,6 +71,11 @@
       @close="mostrarModalAcompañamiento = false"
       @acompañamiento-solicitado="handleAcompañamientoSolicitado"
     />
+    <PerfilModal 
+      :visible="perfilModalVisible"
+      :nombre-usuario="perfilModalUsuario"
+      @close="perfilModalVisible = false"
+    />
   </div>
 
 
@@ -96,6 +100,7 @@ import IncidenciaForm from '@/components/IncidenciaForm.vue'
 import MapaZonas from '@/components/MapaZonas.vue'
 import AcompañamientoModal from '@/components/AcompañamientoModal.vue'
 import AcompañamientosPanel from '@/components/AcompañamientosPanel.vue'
+import PerfilModal from '@/components/PerfilModal.vue'
 
 const router = useRouter()
 
@@ -126,14 +131,17 @@ async function handleResponderSolicitud({ id, acepta }) {
 
 // ----- USUARIOS ------------------------------------------------
 const usuarios = ref([])
+const perfilModalVisible = ref(false)
+const perfilModalUsuario = ref(null)
 
 async function cargarUsuarios() {
   const res = await api.get('api/v1/usuarios/')
   usuarios.value = res.data
 }
 
-async function handleVerPerfil(nombreUsuario) {
-  alert(`Perfil de ${nombreUsuario }`)
+function handleVerPerfil(nombreUsuario) {
+  perfilModalUsuario.value = nombreUsuario
+  perfilModalVisible.value = true
 }
 
 
@@ -181,9 +189,7 @@ const acompañamientosPanelRef = ref(null)
 const {
   mostrarModalAcompañamiento,
   nuevoAcompañamientoCercano,
-  disponible,
   cargarPerfil,
-  handleToggleDisponible,
   handleAcompañamientoSolicitado,
   aceptarAcompañamientoComoAcompañante,
   acompañamientosIgnorados,
@@ -191,8 +197,9 @@ const {
   onNuevoAcompañamiento,
   onAcompañantePropuesto,
   onAcompañamientoConfirmado,
+  onAcompañamientoFinalizado,
   abrirModalAcompañamiento,
-} = useAcompañamiento(acompañamientoModalRef)
+} = useAcompañamiento(acompañamientoModalRef, acompañamientosPanelRef)
 
 async function handleAceptarDesdePanel(acompañamientoId) {
   await api.post(`api/v1/acompañamientos/${acompañamientoId}/aceptar/`)
@@ -223,6 +230,9 @@ const { connect, disconnect } = useWebSocket({
     onAcompañamientoConfirmado(data)
     acompañamientosPanelRef.value?.cargar()
   },
+  onAcompañamientoFinalizado: (data) => {
+    acompañamientosPanelRef.value?.cargar()
+  }
   
 })
 
@@ -233,6 +243,8 @@ onMounted(async () => {
     cargarIncidencias(),
     cargarSolicitudesPendientes(),
     cargarPerfil(),
+    cargarZonas(),
+    cargarIncidencias()
   ])
   connect()
 })

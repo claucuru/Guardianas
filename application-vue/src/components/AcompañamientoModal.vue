@@ -55,6 +55,10 @@
             </div>
             <input  v-if="horaMode === 'personalizada'" v-model="horaPersonalizada" type="time" class="hora-input"/>
           </div>
+          <div class="hora-selector">
+            <label class="hora-label">¿A qué hora terminará el acompañamiento?</label>
+            <input v-model="horaFin" type="time" class="hora-input"/>
+          </div>
 
           <p v-if="errorUbicacion" class="error-msg">{{ errorUbicacion }}</p>
 
@@ -82,7 +86,7 @@
 
         <!-- Acompañante propuesto -->
         <div v-else-if="paso === 'acompañante_propuesto'" class="modal-body modal-estado">
-          <p class="estado-titulo">¡Usuaria disponible!</p>
+          <p class="estado-titulo">¡Usuario disponible!</p>
           <div class="acompañante-card">
             <span class="acompañante-nombre">{{ acompañantePropuesta }}</span>
             <p class="acompañante-sub">Ha aceptado acompañarte</p>
@@ -138,6 +142,7 @@ const acompañantePropuesta = ref('')
 const seleccionando = ref('origen') // 'origen' | 'destino'
 const horaMode = ref('ahora')
 const horaPersonalizada = ref('')
+const horaFin = ref('')
 
 let mapaModal = null
 let marcadorOrigen = null
@@ -233,6 +238,8 @@ async function usarUbicacionActual() {
   }
 }
 
+
+
 async function pedirAcompañamiento() {
   cargando.value = true
   errorUbicacion.value = ''
@@ -242,17 +249,22 @@ async function pedirAcompañamiento() {
       origen_lng: origenLng.value,
       destino_lat: destinoLat.value,
       destino_lng: destinoLng.value,
+      hora_fin: horaFin.value || null,
     }
 
+    
     if (horaMode.value === 'personalizada' && horaPersonalizada.value) {
       payload.hora_solicitada = horaPersonalizada.value
     }
 
+    console.log('Payload enviado:', payload)
     const res = await api.post('api/v1/acompañamientos/pedir/', payload)
     acompañamientoId.value = res.data.id
     paso.value = 'esperando'
     emit('acompañamiento-solicitado', res.data.id)
-  } catch {
+  } catch (err){
+    console.error('Error:', err)
+    console.error('Response data:', err.response?.data)
     errorUbicacion.value = 'Error al solicitar. Inténtalo de nuevo.'
   } finally {
     cargando.value = false
@@ -268,7 +280,7 @@ async function cancelar() {
 }
 
 async function responder(acepta) {
-  await api.post(`api/v1/acompañamientos/${acompañamientoId.value}/`, { acepta })
+  await api.post(`api/v1/acompañamientos/${acompañamientoId.value}/responder/`, { acepta })
   if (acepta) paso.value = 'asignado'
   else {
     acompañantePropuesta.value = ''
@@ -290,6 +302,7 @@ function resetear() {
   seleccionando.value = 'origen'
   horaMode.value = 'ahora'
   horaPersonalizada.value = ''
+  horaFin.value = ''
   // Limpiar marcadores
   if (marcadorOrigen)  { mapaModal?.removeLayer(marcadorOrigen);  marcadorOrigen = null }
   if (marcadorDestino) { mapaModal?.removeLayer(marcadorDestino); marcadorDestino = null }

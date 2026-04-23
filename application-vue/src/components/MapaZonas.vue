@@ -72,15 +72,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-draw'
 import 'leaflet-draw/dist/leaflet.draw.css'
 
+
 const props = defineProps({
+  zonas: {type: Array, default: ()=> ([])},
   incidencias: { type: Array,  default: () => ([]) },
-  zonaActiva:  { type: Object, default: null },
+  zonaActiva: { type: Object, default: null },
 })
 
 const emit = defineEmits(['mapa-listo', 'zona-guardada', 'agregar-', 'cerrar-panel'])
@@ -200,6 +202,36 @@ function resetFormulario() {
   capaPendiente.value         = null
   zonasCercanas.value         = []
 }
+
+function colorPorGravedad(total) {
+  if (!total || total === 0) return '#9B71B2' //Sin incidencias
+  if (total < 5) return '#f0c040' //leve
+  if (total < 15) return '#f07830' //moderado
+  return '#d03020' //grave
+}
+
+watch (
+  () => props.zonas,
+  (nuevasZonas) => {
+    if (!zonasLayer) return
+    zonasLayer.clearLayers() 
+    nuevasZonas.forEach((zona) => {
+      if (!zona.geometry) return 
+      const capa = L.geoJSON(zona, {
+        style: {
+          color: colorPorGravedad(zona.properties.total_gravedad),
+          weight: 2,
+          fillOpacity: 0.18,
+        },
+      })
+      capa.on('click', ()=> {
+        emit('zona-click', zona)
+      })
+      capa.addTo(zonasLayer)
+    })
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
