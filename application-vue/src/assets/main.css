@@ -61,7 +61,12 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-.logo-icon { font-size: 1.8rem; color: #e3d0ea; }
+.logo-icon { 
+  width: 1.8rem;
+  height: 1.8rem;
+  color: #e3d0ea;
+  flex-shrink: 0; 
+}
 
 .auth-tabs {
   display: flex;
@@ -541,7 +546,8 @@ h1, h2, h3, .app-title {
 /* ── TOASTS ────────────────────────────────────────────── */
 .toast {
   position: fixed;
-  bottom: 24px; right: 24px;
+  bottom: 90px;
+  right: 24px;
   display: flex;
   align-items: center;
   gap: 12px;

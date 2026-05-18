@@ -78,7 +78,7 @@
         <!-- Esperando -->
         <div v-else-if="paso === 'esperando'" class="modal-body modal-estado">
           <p class="estado-titulo">Buscando acompañante cercana...</p>
-          <p class="estado-sub">Se notificará a usuarias disponibles en un radio de 2 km</p>
+          <p class="estado-sub">Se notificará a usuarios disponibles en un radio de 2 km</p>
           <button class="btn-ghost btn-full" style="margin-top:1rem" @click="cancelar">
             Cancelar solicitud
           </button>
@@ -101,6 +101,19 @@
         <div v-else-if="paso === 'asignado'" class="modal-body modal-estado">
           <p class="estado-titulo">¡Acompañamiento confirmado!</p>
           <p class="estado-sub">Se ha compartido tu ubicación exacta con tu acompañante</p>
+          <template v-if="props.tipo === 'VIRTUAL'">
+            <button class="btn-panico btn-full" style="margin-top:1rem" @click="activarPanico">SOS</button>
+            <button class="btn-primary btn-full" style="margin-top:8px" @click="finalizarViaje">He finalizado el viaje</button>
+          </template>
+          <template v-else>
+            <button class="btn-primary btn-full" style="margin-top:1rem" @click="cerrar">Cerrar</button>
+          </template>
+        </div>
+
+        <!-- Finalizado -->
+        <div v-else-if="paso === 'finalizado'" class="modal-body modal-estado">
+          <p class="estado-titulo">¡Viaje finalizado!</p>
+          <p class="estado-sub">Tu acompañante ha sido notificada</p>
           <button class="btn-primary btn-full" style="margin-top:1rem" @click="cerrar">Cerrar</button>
         </div>
 
@@ -114,7 +127,7 @@ import { ref, watch, nextTick } from 'vue'
 import L from 'leaflet'
 import api from '@/services/api'
 
-const props = defineProps({ visible: { type: Boolean, default: false } })
+const props = defineProps({ visible: { type: Boolean, default: false }, tipo: { type: String, default: 'FISICO'} })
 const emit = defineEmits(['close', 'acompañamiento-solicitado'])
 
 const iconoOrigen = L.divIcon({
@@ -250,6 +263,7 @@ async function pedirAcompañamiento() {
       destino_lat: destinoLat.value,
       destino_lng: destinoLng.value,
       hora_fin: horaFin.value || null,
+      tipo: props.tipo,
     }
 
     
@@ -317,7 +331,30 @@ function notificarAcompañantePropuesta(nombre) {
 function notificarAcompañamientoConfirmado() {
   paso.value = 'asignado'
 }
+
+// Acompañamiento virtual
+async function activarPanico() {
+  try {
+    const pos = await new Promise((res, rej) => 
+    navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
+    )
+    await api.post(`api/v1/acompañamientos/${acompañamientoId.value}/panico/`, {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+    })
+  } catch {
+    // Si no hay coordenadas se envía de todas formas
+    await api.post(`api/v1/acompañamientos/${acompañamientoId.value}/panico/`)
+  }
+}
+
+async function finalizarViaje() {
+  await api.post(`api/v1/acompañamientos/${acompañamientoId.value}/finalizar/`)
+  paso.value = 'finalizado'
+}
+
 defineExpose({ notificarAcompañantePropuesta, notificarAcompañamientoConfirmado })
+
 </script>
 
 <style scoped>
@@ -574,6 +611,20 @@ defineExpose({ notificarAcompañantePropuesta, notificarAcompañamientoConfirmad
 .btn-rechazar-acompañamiento:hover { border-color: var(--danger); color: var(--danger); }
 
 .btn-full { width: 100%; }
+
+.btn-panico {
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity .2s;
+}
+.btn-panico:active { opacity: 0.85; }
 
 /* ----- Transición --------------------------------------- */
 .modal-fade-enter-active, .modal-fade-leave-active {

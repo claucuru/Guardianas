@@ -68,7 +68,7 @@
                   </div>
                   <div v-if="a.acompañante && a.estado === 'ACEPTADO'" class="acomp-propuesta">
                     <div class="acomp-persona">
-                      <span class="acomp-persona-label">Acompañante propuesta</span>
+                      <span class="acomp-persona-label">Acompañante propuesto</span>
                       <span class="acomp-persona-nombre">{{ a.acompañante_nombre || a.acompañante }}</span>
                     </div>
                     <div class="acomp-propuesta-btns">
@@ -89,6 +89,10 @@
                       <button class="btn-ver-perfil" @click="emit('ver-perfil', a.acompañante)">
                         Ver perfil
                       </button>
+                  </div>
+                  <div v-if="a.estado === 'ASIGNADO' && a.tipo === 'VIRTUAL'" class="acomp-acciones-criticas">
+                    <button class="btn-panico-panel" @click="activarPanico(a.id)">SOS</button>
+                    <button class="btn-finalizar-panel" @click="finalizarAcompañamiento(a.id)">He finalizado el viaje</button>
                   </div>
 
                   <!-- Valoración --> 
@@ -124,11 +128,16 @@
                 <div v-if="disponibles.length === 0" class="acomp-vacio">
                     No hay solicitudes cercanas disponibles
                 </div>
+                
                 <div v-for="a in disponibles" :key="a.id" class="acomp-item">
+                  <div class="acomp-item-top">
+                    <span class="acomp-virtual-label">Acompañamiento virtual</span>
+                  </div>
                     <div class="acomp-item-top">
                         <span class="acomp-solicitante">{{ a.solicitante_nombre || a.solicitante }}</span>
                         <span class="acomp-fecha">{{ formatearFecha(a.fecha) }}</span>
                     </div>
+                    
                     <MapaAcompañamientos
                       v-if="a.origen_lat && a.destino_lat"
                       :origen-lat="a.origen_lat"
@@ -310,6 +319,25 @@ async function valorar(id) {
     console.error('Error al valorar:', err.response?.data)
   }
   
+}
+
+async function activarPanico(id) {
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
+    )
+    await api.post(`api/v1/acompañamientos/${id}/panico/`, {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+    })
+  } catch {
+    await api.post(`api/v1/acompañamientos/${id}/panico/`)
+  }
+}
+
+async function finalizarAcompañamiento(id) {
+  await api.post(`api/v1/acompañamientos/${id}/finalizar/`)
+  await cargar()
 }
 
 
@@ -520,6 +548,10 @@ btn-cerrar-notif {
   color: var(--muted);
 }
 
+.acomp-virtual-label {
+  color: #6e4b87;
+}
+
 .acomp-persona-nombre {
   font-weight: 600;
   color: var(--accent-strong);
@@ -639,6 +671,45 @@ btn-cerrar-notif {
   font-size: 0.82rem;
   resize: none;
 }
+
+.acomp-acciones-criticas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.btn-panico-panel {
+  width: 100%;
+  padding: 12px;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1.5px solid #dc3545;
+  color: #dc3545;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s;
+  letter-spacing: 0.5px;
+}
+.btn-panico-panel:hover { background: rgba(220, 53, 69, 0.2); }
+.btn-panico-panel:active { background: rgba(220, 53, 69, 0.3); }
+
+.btn-finalizar-panel {
+  width: 100%;
+  padding: 12px;
+  background: rgba(95, 143, 123, 0.1);
+  border: 1.5px solid var(--green);
+  color: var(--green);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s;
+}
+.btn-finalizar-panel:hover { background: rgba(95, 143, 123, 0.2); }
+.btn-finalizar-panel:active { background: rgba(95, 143, 123, 0.3); }
 
 </style>
 

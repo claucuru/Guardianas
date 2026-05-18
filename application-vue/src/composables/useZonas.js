@@ -19,7 +19,22 @@ export function useZonas(mapRef, onZonaClick) {
       const res = await api.get('api/v1/zonas/')
       const geojson = res.data
       console.log(geojson.features[0])
-      zonas.value = geojson.features.map(f => ({ id: f.properties.id, nombre: f.properties.nombre, coordenadas: f.geometry, }))
+
+      const nuevasZonas = geojson.features.map(f => ({
+        id: f.properties.id,
+        nombre: f.properties.nombre,
+        coordenadas: f.geometry,
+      }))
+
+      const mismasZonas = 
+        nuevasZonas.length === zonas.value.length && nuevasZonas.every((z, i) => z.id === zonas.value[i].id && z.nombre === zonas.value[i]?.nombre)
+      
+      // si cambiaron las zonas, las actualizamos
+        if (!mismasZonas) {
+        zonas.value = nuevasZonas
+      }
+
+      zonas.value = geojson.features.map(f => ({ id: f.id, nombre: f.properties.nombre, coordenadas: f.geometry, }))
       if (zonasLayer.value) mapRef.value.removeLayer(zonasLayer.value)
       zonasLayer.value = L.geoJSON(geojson, {
         style(feature) {
@@ -34,7 +49,7 @@ export function useZonas(mapRef, onZonaClick) {
           layer.on('click', () => {
             console.log('clic en feature:', feature)
             if (onZonaClick) onZonaClick({
-                id: feature.properties.id,
+                id: feature.id,
                 nombre: feature.properties.nombre,
             })
           })

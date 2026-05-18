@@ -13,6 +13,7 @@ export function useIncidencias() {
   }
 
   async function agregarIncidencia(onSuccess) {
+    console.log('zonaSeleccionada al crear: ', zonaSeleccionada.value)
     if (!zonaSeleccionada.value) {
       alert('Selecciona una zona')
       return
@@ -25,8 +26,8 @@ export function useIncidencias() {
       })
       descripcion.value = ''
       gravedadSeleccionada.value = 1
+      zonaSeleccionada.value = null
       await cargarIncidencias()
-      await cargarZonas()
       onSuccess?.()   // Recargamos las zonas
     } catch (e) {
       console.error('Error al crear incidencia:', e)

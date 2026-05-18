@@ -26,7 +26,6 @@ urlpatterns = [
     path("api/login/", views.incioSesion),
     path("api/registro/", views.registrar_usuario),
     path("api/solicitudes-pendientes/", views.mis_solicitudes_pendientes),
-    # path('api/v1/acompañamientos/disponible/', views.activar_disponible),
     path('api/v1/acompañamientos/activos/', views.mis_acompañamientos_activos),
     path('api/v1/perfil/', views.mi_perfil),
     path("api/solicitudes/<int:pendiente_id>/responder/", views.responder_solicitud_registro),
@@ -38,6 +37,8 @@ urlpatterns = [
     path('api/v1/ubicacion/actualizar/', views.actualizar_ubicacion),
     path('api/v1/acompañamientos/<int:acompañamiento_id>/hora-fin/', views.marcar_hora_fin),
     path('api/v1/acompañamientos/<int:acompañamiento_id>/valorar/', views.valorar_acompañamiento),
-    path('api/v1/perfil/<str:nombre_usuario>/', views.ver_perfil_usuario)
-   
+    path('api/v1/perfil/<str:nombre_usuario>/', views.ver_perfil_usuario),
+    path('api/v1/acompañamientos/<int:acompañamiento_id>/panico/', views.activar_panico),
+    path('api/v1/acompañamientos/<int:acompañamiento_id>/finalizar/', views.finalizar_acompañamiento),
+    path('api/v1/acompañamientos/<int:acompañamiento_id>/ubicacion-panico/', views.obtener_ubicacion_panico),
 ]

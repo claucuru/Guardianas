@@ -37,7 +37,7 @@
           :zona-seleccionada="zonaSeleccionada"
           :gravedad-seleccionada="gravedadSeleccionada"
           :descripcion="descripcion"
-          @update:zona-seleccionada="zonaSeleccionada = $event"
+          @update:zona-seleccionada="(val) => { console.log('zona recibida:', val); zonaSeleccionada = val }"
           @update:gravedad-seleccionada="gravedadSeleccionada = $event"
           @update:descripcion="descripcion = $event"
           @crear="handleCrearIncidencia"
@@ -67,6 +67,7 @@
     </transition>
     <AcompañamientoModal
       :visible="mostrarModalAcompañamiento"
+      :tipo="tipoAcompañamiento"
       ref="acompañamientoModalRef"
       @close="mostrarModalAcompañamiento = false"
       @acompañamiento-solicitado="handleAcompañamientoSolicitado"
@@ -75,6 +76,15 @@
       :visible="perfilModalVisible"
       :nombre-usuario="perfilModalUsuario"
       @close="perfilModalVisible = false"
+    />
+    <Menu 
+      @pedir-acompañamiento="() => { tipoAcompañamiento = 'FISICO'; abrirModalAcompañamiento() }"
+      @pedir-acompañamiento-virtual="() => { tipoAcompañamiento = 'VIRTUAL'; abrirModalAcompañamiento() }"
+    />
+    <AlertaPanico
+      v-if="alertaPanico"
+      :datos="alertaPanico"
+      @cerrar="alertaPanico = null"
     />
   </div>
 
@@ -101,6 +111,8 @@ import MapaZonas from '@/components/MapaZonas.vue'
 import AcompañamientoModal from '@/components/AcompañamientoModal.vue'
 import AcompañamientosPanel from '@/components/AcompañamientosPanel.vue'
 import PerfilModal from '@/components/PerfilModal.vue'
+import Menu from '@/components/Menu.vue'
+import AlertaPanico from '@/components/AlertaPanico.vue'
 
 const router = useRouter()
 
@@ -185,6 +197,8 @@ const incidenciasFiltradas = computed(() =>
 // ----- ACOMPAÑAMIENTO ------------------------------------------------
 const acompañamientoModalRef = ref(null)
 const acompañamientosPanelRef = ref(null)
+const tipoAcompañamiento = ref('FISICO')
+const alertaPanico = ref(null)
 
 const {
   mostrarModalAcompañamiento,
@@ -202,8 +216,12 @@ const {
 } = useAcompañamiento(acompañamientoModalRef, acompañamientosPanelRef)
 
 async function handleAceptarDesdePanel(acompañamientoId) {
-  await api.post(`api/v1/acompañamientos/${acompañamientoId}/aceptar/`)
-  acompañamientosPanelRef.value?.cargar()
+    try {
+    await api.post(`api/v1/acompañamientos/${acompañamientoId}/aceptar/`)
+    acompañamientosPanelRef.value?.cargar()
+  } catch (err) {
+    console.error('Error aceptar:', err.response?.data)  // <-- esto
+  }
 }
 
 async function handleResponderAcompañamiento({id, acepta}) {
@@ -232,7 +250,14 @@ const { connect, disconnect } = useWebSocket({
   },
   onAcompañamientoFinalizado: (data) => {
     acompañamientosPanelRef.value?.cargar()
-  }
+  },
+  onAlertaPanico: (data) => {
+    alertaPanico.value = data
+    acompañamientosPanelRef.value?.cargar()
+  },
+  onAcompañamientoFinalizadoAcompañante: (data) => {
+  acompañamientosPanelRef.value?.cargar()
+},
   
 })
 
@@ -243,8 +268,7 @@ onMounted(async () => {
     cargarIncidencias(),
     cargarSolicitudesPendientes(),
     cargarPerfil(),
-    cargarZonas(),
-    cargarIncidencias()
+    // cargarZonas(),
   ])
   connect()
 })

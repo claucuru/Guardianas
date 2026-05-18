@@ -3,10 +3,7 @@
     <h3>Nueva Incidencia</h3>
     <div class="field">
       <label>Zona</label>
-      <select
-        :value="zonaSeleccionada"
-        @change="$emit('update:zonaSeleccionada', +$event.target.value)"
-      >
+      <select v-model="zonaLocal">
         <option v-for="zona in zonas" :key="zona.id" :value="zona.id">
           {{ zona.nombre }}
         </option>
@@ -37,12 +34,20 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+const props = defineProps({
   zonas: Array,
   zonaSeleccionada: Number,
   gravedadSeleccionada: Number,
   descripcion: String,
 })
 
-defineEmits(['update:zonaSeleccionada', 'update:gravedadSeleccionada', 'update:descripcion', 'crear'])
+const emit = defineEmits(['update:zonaSeleccionada', 'update:gravedadSeleccionada', 'update:descripcion', 'crear'])
+const zonaLocal = computed({
+  get: () => props.zonaSeleccionada,
+  set: (val) => {
+    console.log('zonaLocal set:', val, typeof val)
+    emit('update:zonaSeleccionada', val)
+  }
+})
 </script>

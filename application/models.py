@@ -94,6 +94,17 @@ class Acompañamiento(models.Model):
     caduca_en = models.DateTimeField(default=expiracion_acompañamiento)
     hora_solicitada = models.TimeField(null=True, blank=True)
     hora_fin_estimada = models.TimeField(null=True, blank=True)
+    tipo = models.CharField(
+        max_length=20,
+        choices=[
+            ("VIRTUAL", "Virtual"),
+            ("FISICO", "Físico"),
+        ],
+        default='FISICO'
+    )
+    
+    panico = models.PointField(srid=4326, null=True, blank=True)
+    panico_activado = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Solicitante {self.solicitante}, Acompañante {self.acompañante or 'sin asignar'}"

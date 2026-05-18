@@ -5,7 +5,6 @@ from django.db import models
 from django.shortcuts import render
 
 # Create your views here.
-from api.forms import LoginForm
 from rest_framework import viewsets
 from application.models import RegistroPendiente, Ubicacion, PerfilUsuario, Valoracion, Zona, Incidencia, Acompañamiento, CandidatoAcompañamiento
 from .serializers import  PerfilUsuarioSerializer, ZonaSerializer, IncidenciaSerializer, AcompañamientoSerializer
@@ -21,7 +20,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .consumers import send_notificacion, send_notificacion_acompañamiento, send_notificacion_acompañamiento_confirmado, send_notificacion_acompañante_propuesto, send_notificacion_cancelacion, send_notificacion_finalizado
+from .consumers import send_notificacion, send_notificacion_acompañamiento, send_notificacion_acompañamiento_confirmado, send_notificacion_acompañante_propuesto, send_notificacion_cancelacion, send_notificacion_finalizado, send_alerta_panico, send_acompañamiento_finalizado
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
@@ -189,7 +188,6 @@ def responder_solicitud_registro(request, pendiente_id):
 @permission_classes([IsAuthenticated])
 def mis_solicitudes_pendientes(request):
     """ Devuelve las solicitudes que esperan respuesta del usuario autenticado. """
-    # TODO
     perfil = request.user.perfilusuario
     solicitudes = RegistroPendiente.objects.filter(
         models.Q(mujer1=perfil, m1_acepto__isnull=True) | models.Q(mujer2=perfil, m2_acepto__isnull=True),
@@ -207,36 +205,6 @@ def mis_solicitudes_pendientes(request):
     ]
 
     return Response(data)
-
-        
-        
-
-# @api_view(['POST'])
-# @authentication_classes([TokenAuthentication])
-# @permission_classes([IsAuthenticated])
-# def activar_disponible(request):
-#     perfil = request.user.perfilusuario
-#     perfil.disponible = not perfil.disponible
-#     perfil.save()
-
-#     if perfil.disponible:
-#         lat = request.data.get('lat')
-#         lng = request.data.get('lng')
-#         if lat and lng:
-#             Ubicacion.objects.update_or_create(
-#                 usuario=perfil,
-#                 defaults={
-#                     'posicion': Point(float(lng), float(lat), srid=4326),
-#                     "disponible": True,
-#                 }
-#             )
-#         else:
-#             Ubicacion.objects.filter(usuario=perfil).update(disponible=True)
-#     else:
-#         # Se ha desactivado entonces marcamos la ubicación como no disponible
-#         Ubicacion.objects.filter(usuario=perfil).update(disponible=False)
-
-#     return Response({"disponible": perfil.disponible})
 
 def añadir_ruido(coord, metros=100):
     """ Desplaza una coordenada alrededor de 400 metros en dirección aleatoria """
@@ -276,12 +244,14 @@ def pedir_acompañamiento(request):
     
     origen = Point(float(origen_lng), float(origen_lat), srid=4326)
     destino = Point(float(destino_lng), float(destino_lat), srid=4326)
+    tipo = request.data.get('tipo', 'FISICO')
 
     acompañamiento = Acompañamiento.objects.create(
         solicitante=request.user.perfilusuario,
         origen=origen,
         destino=destino,
         estado="SOLICITADO",
+        tipo=tipo,
     )
 
     hora_solicitada = None
@@ -306,15 +276,25 @@ def pedir_acompañamiento(request):
             pass
     
     acompañamiento.save()
-    # Notificar a personas en un radio de 2km
-    acompañantes_cercanos = Ubicacion.objects.filter(
-        disponible=True,
-        usuario__disponible= True,
-    ).exclude(
-        usuario=request.user.perfilusuario
-    ).filter(
-        posicion__distance_lte=(origen, D(km=2))
-    ).select_related('usuario')
+    
+    if tipo == 'VIRTUAL':
+        # Acompañamiento virtual. Notificar a todos los usuarios disponibles
+        acompañantes_cercanos = Ubicacion.objects.filter(
+            disponible=True,
+            usuario__disponible= True,
+        ).exclude(
+            usuario=request.user.perfilusuario
+        ).select_related('usuario')
+    else:
+        # Acompañamiento físico. Notificar solo a personas en un radio de 2km
+        acompañantes_cercanos = Ubicacion.objects.filter(
+            disponible=True,
+            usuario__disponible= True,
+        ).exclude(
+            usuario=request.user.perfilusuario
+        ).filter(
+            posicion__distance_lte=(origen, D(km=2))
+        ).select_related('usuario')
     
     for ubi in acompañantes_cercanos:
         send_notificacion_acompañamiento(ubi.usuario.user.id, acompañamiento)
@@ -382,6 +362,7 @@ def mis_acompañamientos(request):
 
         return {
             "id": a.id,
+            "tipo": a.tipo,
             "cancelado_por": a.cancelado_por,
             "estado": a.estado,
             "es_mio": es_mio,
@@ -509,8 +490,6 @@ def usuario_acepta_acompañamiento(request, acompañamiento_id):
         return Response({"error": "Acompañamiento no disponible"}, status=404)
     
     perfil = request.user.perfilusuario
-    if not perfil.disponible:
-        return Response({"error": "No estás disponible"}, status=400)
     
     candidato, creado = CandidatoAcompañamiento.objects.get_or_create(
         acompañamiento=acompañamiento,
@@ -571,21 +550,6 @@ def solicitante_responde_acompañante(request, acompañamiento_id):
             acompañamiento.acompañante = None
             acompañamiento.estado = "SOLICITADO"
             acompañamiento.save()
-
-        # Volvemos a mandar la notificación de acompañamiento al resto de usuarios
-        # acompañantes_cercanos = Ubicacion.objects.filter(
-        #     disponible=True,
-        #     usuario__disponible=True,
-        # ).exclude(
-        #     usuario=acompañamiento.solicitante
-        # ).exclude(
-        #     usuario=perfil_rechazado
-        # ).filter(
-        #     posicion__distance_lte=(acompañamiento.origen, D(km=2))
-        # ).select_related('usuario')
-
-        # for ubi in acompañantes_cercanos:
-        #     send_notificacion_acompañamiento(ubi.usuario.user.id, acompañamiento)
 
         return Response({"status": "acompañante_rechazado"})
 
@@ -653,8 +617,7 @@ class AcompañamientoViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         acompañamiento = serializer.save(solicitante=self.request.user)
         self.buscar_acompañantes_cercanos(acompañamiento)
-    
-    # TODO: Poner en un servicio
+
     def buscar_acompañantes_cercanos(self, acompañamiento):
         origen = acompañamiento.origen
         acompañantes = Ubicacion.objects.filter(
@@ -718,12 +681,7 @@ def finalizar_acompañamientos_expirados():
     expirados = Acompañamiento.objects.filter(
         estado='ASIGNADO',
         fecha_fin__lte=ahora,
-    )#.filter(
-        # La hora solicitada ya ha pasado
-    #     fecha_comienzo__date = ahora.dat(),
-    # ).exclude(
-    #     fecha_fin__isnull=True
-    # )
+    )
 
     for a in expirados:
         a.estado = 'FINALIZADO'
@@ -789,4 +747,86 @@ def ver_perfil_usuario(request, nombre_usuario):
         "puntuacion_media": perfil.puntuacion_media,
         "num_acompañamientos": perfil.num_acompañamientos,
         "genero": perfil.genero,
+    })
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def activar_panico(request, acompañamiento_id):
+    perfil = request.user.perfilusuario
+    try: 
+        acompañamiento = Acompañamiento.objects.get(
+            id=acompañamiento_id,
+            solicitante=perfil,
+            estado='ASIGNADO',
+            tipo="VIRTUAL",
+        )
+        print(f"tipo={acompañamiento.tipo}, estado={acompañamiento.estado}, solicitante={acompañamiento.solicitante}, perfil={perfil}")
+    except Acompañamiento.DoesNotExist:
+        return Response({"error": "No encontrado"}, status=404)
+    
+    lat = request.data.get('lat')
+    lng = request.data.get('lng')
+    
+    acompañamiento.panico_activado = True
+    if lat and lng:
+        acompañamiento.panico = Point(float(lng), float(lat), srid=4326)
+    
+    acompañamiento.save()
+    print(f"Acompañante: {acompañamiento.acompañante}")
+    if acompañamiento.acompañante:
+        print(f"Enviando pánico a user_{acompañamiento.acompañante.user.id}")
+        send_alerta_panico(
+            acompañamiento.acompañante.user.id,
+            acompañamiento,
+            lat=acompañamiento.panico.y if acompañamiento.panico else None,
+            lng = acompañamiento.panico.x if acompañamiento.panico else None,
+        )
+    
+    return Response({"status": "panico_activado"})
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def finalizar_acompañamiento(request, acompañamiento_id):
+    perfil = request.user.perfilusuario
+    try:
+        acompañamiento = Acompañamiento.objects.get(
+            id=acompañamiento_id,
+            solicitante=perfil,
+            estado='ASIGNADO',
+            tipo='VIRTUAL',
+        )
+    except Acompañamiento.DoesNotExist:
+        return Response({"error": "No encontrado"}, status=404)
+
+    acompañamiento.estado = 'FINALIZADO'
+    acompañamiento.save()
+
+    if acompañamiento.acompañante:
+        send_acompañamiento_finalizado(acompañamiento.acompañante.user.id, acompañamiento)
+    send_notificacion_finalizado(acompañamiento.solicitante.user.id, acompañamiento)
+
+    return Response({"status": "acompañamiento_finalizado"})
+
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def obtener_ubicacion_panico(request, acompañamiento_id):
+    perfil = request.user.perfilusuario
+    try:
+        acompañamiento = Acompañamiento.objects.get(
+            id=acompañamiento_id,
+            acompañante=perfil,
+            tipo='VIRTUAL',
+        )
+    except Acompañamiento.DoesNotExist:
+        return Response({"error": "No encontrado"}, status=404)
+
+    return Response({
+        "panico_activado": acompañamiento.panico_activado,
+        "lat": acompañamiento.panico.y if acompañamiento.panico else None,
+        "lng": acompañamiento.panico.x if acompañamiento.panico else None,
+        "solicitante": acompañamiento.solicitante.nombre_completo or acompañamiento.solicitante.nombreUsuario,
     })

@@ -1,21 +1,17 @@
 <template>
   <header class="top-bar">
     <div class="top-bar-left">
-      <span class="logo-icon">🛡</span>
+      <svg class="logo-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.35C17.25 22.15 21 17.25 21 12V6l-9-4z"/>
+      </svg>
       <span class="app-title">Guardianas</span>
     </div>
     <div class="top-bar-right">
-      <button class="btn-acompañamiento"  @click="$emit('pedir-acompañamiento')">
-         Pedir acompañamiento
-      </button>
-
-      <span class="username-badge">{{ username }}</span>
-
       <button class="bell-btn" @click="$emit('toggle-solicitudes')">
         🔔
         <span v-if="numSolicitudes" class="badge">{{ numSolicitudes }}</span>
       </button>
-
+      <span class="username-badge">{{ username }}</span>
       <button class="btn-logout" @click="$emit('logout')">Cerrar sesión</button>
     </div>
   </header>
@@ -57,10 +53,6 @@ defineEmits(['toggle-solicitudes', 'logout', 'pedir-acompañamiento'])
     padding: 5px 10px;
   }
 
-  .username-badge {
-    display: none; /* ocupa espacio pero aporta poco en móvil */
-  }
-
   .btn-logout {
     font-size: 0.75rem;
     padding: 5px 10px;
@@ -73,7 +65,7 @@ defineEmits(['toggle-solicitudes', 'logout', 'pedir-acompañamiento'])
   }
 
   .btn-logout {
-    display: none; /* si sigue sin caber, ocúltalo también */
+    display: none;
   }
 }
 
